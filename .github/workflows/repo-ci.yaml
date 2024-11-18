@@ -88,12 +88,14 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Install Dockerfile Lint
+      - name: Install hadolint
         run: |
-          npm install -g dockerfile-lint
+          curl -sSL https://github.com/hadolint/hadolint/releases/download/v2.9.0/hadolint-linux-amd64 -o /usr/local/bin/hadolint
+          chmod +x /usr/local/bin/hadolint
       
-      - name: Validate Dockerfile
-        run: dockerfile-lint -f ./Dockerfile
+      - name: Lint Dockerfile
+        run: |
+          hadolint ./Dockerfile
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
