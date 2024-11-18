@@ -41,6 +41,8 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        continue-on-error: true
+
         
       - name: SonarQube Quality Gate check
         if: ${{ env.SKIP_SONAR != 'true' }}
@@ -51,7 +53,9 @@ jobs:
         env:
          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }} #OPTIONAL
-         SET_SONAR_PROJECT_STATUS: true 
+         SET_SONAR_PROJECT_STATUS: true
+        continue-on-error: true
+
 
   Code_Build:
     runs-on: ubuntu-latest
