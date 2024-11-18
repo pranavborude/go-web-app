@@ -88,21 +88,11 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Install hadolint
-        run: |
-          # Download and extract the hadolint binary
-          curl -sSL https://github.com/hadolint/hadolint/releases/download/v2.9.0/hadolint-linux-amd64.tar.gz -o /tmp/hadolint.tar.gz
-          tar -xvzf /tmp/hadolint.tar.gz -C /tmp
-          mv /tmp/hadolint /usr/local/bin/hadolint
-          chmod +x /usr/local/bin/hadolint
-          
-          # Verify the installation
-          hadolint --version
-  
-      - name: Lint Dockerfile
-        run: |
-          hadolint ./Dockerfile
-      
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ./Dockerfile
+        
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
