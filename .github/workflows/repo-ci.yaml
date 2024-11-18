@@ -136,7 +136,7 @@ jobs:
           cd go-web-app-gitops/go-web-app-chart/
           sed -i.bak "s/tag: .*/tag: \"${{ env.ENVIRONMENT }}-${{ github.run_id }}\"/" ./values.yaml
           git commit -am "Update image tag"
-          git push origin master
+          git push https://github.com/pranavborude/go-web-app-gitops.git master
 
       - name: Post Deployment Tests
         run: echo "Running post-deployment tests..."
