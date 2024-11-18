@@ -1,4 +1,4 @@
-name: Go application build pipeline
+name: Go application build pipeline - app-ci
 on:
   push:
     branches:
