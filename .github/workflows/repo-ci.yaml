@@ -40,11 +40,13 @@ jobs:
       - name: SonarQube Quality Gate check
         if: ${{ env.SKIP_SONAR != 'true' }}
         id: sonarqube-quality-gate-check
-        uses: sonarsource/sonarqube-quality-gate-action@v1
+        uses: opsverseio/sonarqube-quality-gate-action@0.1.0
+        # Force to fail step after specific time.
         timeout-minutes: 5
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+         SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }} #OPTIONAL
+         SET_SONAR_PROJECT_STATUS: true 
 
   Code_Build:
     runs-on: ubuntu-latest
