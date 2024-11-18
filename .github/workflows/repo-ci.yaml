@@ -129,8 +129,6 @@ jobs:
           token: ${{ secrets.TOKEN }}  # Use the secret token to authenticate
       
       - name: Update Tag in GitOps
-        env:
-          TOKEN: ${{ secrets.TOKEN }}
         run: |
           git clone https://github.com/pranavborude/go-web-app-gitops.git
           cd go-web-app-gitops/go-web-app-chart/
