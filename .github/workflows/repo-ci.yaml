@@ -90,9 +90,14 @@ jobs:
 
       - name: Install hadolint
         run: |
-          curl -sSL https://github.com/hadolint/hadolint/releases/download/v2.9.0/hadolint-linux-amd64 -o /usr/local/bin/hadolint
+          # Download and extract the hadolint binary
+          curl -sSL https://github.com/hadolint/hadolint/releases/download/v2.9.0/hadolint-linux-amd64.tar.gz -o /tmp/hadolint.tar.gz
+          tar -xvzf /tmp/hadolint.tar.gz -C /tmp
+          mv /tmp/hadolint /usr/local/bin/hadolint
           chmod +x /usr/local/bin/hadolint
-          hadolint --version  # Verify that hadolint is installed correctly
+          
+          # Verify the installation
+          hadolint --version
   
       - name: Lint Dockerfile
         run: |
