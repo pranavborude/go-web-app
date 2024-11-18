@@ -64,6 +64,7 @@ jobs:
       - name: Build Code
         run: |
           echo "Building the Go application..."
+          pwd
           go build -o go-web-app
 
       - name: Run Tests
