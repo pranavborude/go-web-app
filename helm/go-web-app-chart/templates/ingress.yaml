@@ -19,7 +19,7 @@ spec:
   rules:
     - http:
          paths:
-           - path: /courses
+           - path: /home
              pathType: Prefix
              backend:
                service:
