@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Set up Go 1.22
         uses: actions/setup-go@v2
@@ -25,10 +27,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      # - name: Checkout source code
+      #   uses: actions/checkout@v4
+      #   with:
+      #     fetch-depth: 0
 
       - name: Check for GitLeaks
         uses: gitleaks/gitleaks-action@v2
@@ -62,8 +64,10 @@ jobs:
     
     steps:
 
-      - name: Checkout source code
-        uses: actions/checkout@v4
+      # - name: Checkout source code
+      #   uses: actions/checkout@v4
+      #   with:
+      #     fetch-depth: 0
     
       - name: Build Code
         run: |
@@ -85,8 +89,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+      # - name: Checkout source code
+      #   uses: actions/checkout@v4
 
       - name: Hadolint
         uses: hadolint/hadolint-action@v3.1.0
@@ -109,7 +113,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/go-web-app:${{ env.ENVIRONMENT }}-${{ github.run_id }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/go-web-app:${{ env.ENVIRONMENT }}-${{ github.sha }} # github.run_id -> github.sha (for tagging image using COMMIT_ID)
 
       - name: Integration Testing
         run: echo "Running integration tests..." 
@@ -123,10 +127,10 @@ jobs:
           git config --global user.email "pranavborude2000@gmail.com"
           git config --global user.name "Pranav Borude"
       
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.TOKEN }}  # Use the secret token to authenticate
+      # - name: Checkout repository
+      #   uses: actions/checkout@v3
+      #   with:
+      #     token: {{ secrets.TOKEN }}  # Use the secret token to authenticate
       
       - name: Update Tag in GitOps
         run: |
