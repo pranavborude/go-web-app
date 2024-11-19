@@ -136,7 +136,7 @@ jobs:
           git commit -am "Update image tag"
           git config --global user.email "pranavborude2000@gmail.com"
           git config --global user.name "Pranav Borude"
-          git push https://pranavborude:Pranav@123#321@github.com/pranavborude/go-web-app-gitops
+          git push https://github.com/pranavborude/go-web-app-gitops.git master
 
       - name: Post Deployment Tests
         run: echo "Running post-deployment tests..."
