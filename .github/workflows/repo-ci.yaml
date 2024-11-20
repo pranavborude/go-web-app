@@ -7,6 +7,10 @@ on:
 env:
   SKIP_SONAR: false
   ENVIRONMENT: dev
+  
+  # Replace with your ArgoCD URL and application name
+  ARGOCD_URL: "http://aadf0d623dab14626b531a6c682f4fea-237815234.ap-south-1.elb.amazonaws.com"
+  APP_NAME: "go-web-app"
 
 jobs:
   Install:
@@ -159,12 +163,8 @@ jobs:
 
           sleep 30
 
-          # Replace with your ArgoCD URL and application name
-          ARGOCD_URL="http://aadf0d623dab14626b531a6c682f4fea-237815234.ap-south-1.elb.amazonaws.com"
-          APP_NAME="go-web-app"
-
           # Fetch application details using the ArgoCD token
-          JSON_OUTPUT=$(curl -s -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" "$ARGOCD_URL/api/v1/applications/$APP_NAME")
+          JSON_OUTPUT=$(curl -s -X GET -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" "$ARGOCD_URL/api/v1/applications/$APP_NAME")
 
           # Extract the .status.health.status value using jq
           HEALTH_STATUS=$(echo "$JSON_OUTPUT" | jq -r '.status.health.status')
