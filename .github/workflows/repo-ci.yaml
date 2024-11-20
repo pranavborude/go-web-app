@@ -160,8 +160,6 @@ jobs:
 
         run: |
 
-          sleep 30
-
           # Fetch application details using the ArgoCD token
           JSON_OUTPUT=$(curl -s -X GET -H "Authorization: Bearer ${{ secrets.ARGOCD_AUTH_TOKEN }}" "$ARGOCD_URL/api/v1/applications/$APP_NAME")
 
