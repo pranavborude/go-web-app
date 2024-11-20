@@ -25,6 +25,7 @@ jobs:
 
   Code_Scanning:
     runs-on: ubuntu-latest
+    needs: Install
 
     steps:
       - name: Checkout source code
@@ -44,8 +45,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         continue-on-error: true
-
-        
+   
       - name: SonarQube Quality Gate check
         if: ${{ env.SKIP_SONAR != 'true' }}
         id: sonarqube-quality-gate-check
@@ -61,7 +61,8 @@ jobs:
 
   Code_Build:
     runs-on: ubuntu-latest
-    
+    needs: Code_Scanning
+
     steps:
 
       - name: Checkout source code
@@ -87,6 +88,7 @@ jobs:
 
   PushImage2Dockerhub:
     runs-on: ubuntu-latest
+    needs: Code_Build
 
     steps:
       - name: Checkout source code
@@ -115,13 +117,15 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/go-web-app:${{ env.ENVIRONMENT }}-${{ github.sha }} # github.run_id -> github.sha (for tagging image using COMMIT_ID)
 
-      - name: Integration Testing
-        run: echo "Running integration tests..." 
+      # - name: Integration Testing
+      #   run: echo "Running integration tests..." 
 
   UpdateImageTag:
     runs-on: ubuntu-latest
+    needs: PushImage2Dockerhub
 
     steps:
+
       - name: Configure Git user
         run: |
           git config --global user.email "pranavborude2000@gmail.com"
@@ -141,7 +145,56 @@ jobs:
           sed -i.bak "s/tag: .*/tag: \"${{ env.ENVIRONMENT }}-${{ github.sha }}\"/" ./values.yaml
           git commit -am "Update image tag"
           git push https://x-access-token:${{ secrets.TOKEN }}@github.com/pranavborude/go-web-app-gitops.git master
+          
+  CheckAppStatus:
+    runs-on: ubuntu-latest
+    needs: UpdateImageTag
 
+    steps:
+
+      - name: Fetch Application JSON
+        env:
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+
+          Sleep 30
+
+          # Replace with your ArgoCD URL and application name
+          ARGOCD_URL="http://aadf0d623dab14626b531a6c682f4fea-237815234.ap-south-1.elb.amazonaws.com"
+          APP_NAME="go-web-app"
+
+          # Fetch application details using the ArgoCD token
+          JSON_OUTPUT=$(curl -s -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" "$ARGOCD_URL/api/v1/applications/$APP_NAME")
+
+          # Extract the .status.health.status value using jq
+          HEALTH_STATUS=$(echo "$JSON_OUTPUT" | jq -r '.status.health.status')
+
+          # Export the value as an output variable
+          if [[ "$HEALTH_STATUS" == "healthy" ]]; then
+              echo "Application is healthy."
+          else
+              echo "Application health check failed!"
+              exit 1
+          fi          
+
+  ApprovalforUAT:
+    runs-on: ubuntu-latest
+    needs: CheckAppStatus
+
+    steps:
+
+      - name: Waiting for approval
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ secrets.TOKEN }}
+          approvers: pranavborude
+          minimum-approvals: 1
+          issue-title: "Asking approval for UAT"
+          # issue-body: "Please approve or deny the deployment of version v1.3.5."
+          exclude-workflow-initiator-as-approver: false
+          # additional-approved-words: ''
+          # additional-denied-words: ''
+              
       - name: Post Deployment Tests
         run: echo "Running post-deployment tests..."
 
