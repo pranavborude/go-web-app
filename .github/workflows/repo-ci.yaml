@@ -157,7 +157,7 @@ jobs:
           ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
         run: |
 
-          Sleep 30
+          sleep 30
 
           # Replace with your ArgoCD URL and application name
           ARGOCD_URL="http://aadf0d623dab14626b531a6c682f4fea-237815234.ap-south-1.elb.amazonaws.com"
