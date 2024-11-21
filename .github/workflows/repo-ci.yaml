@@ -218,7 +218,7 @@ jobs:
       
       - name: Push to Repository
         run: |
-          docker push pranav1562/$APP_NAME:${{ env.uat_env }}
+          docker push pranav1562/$APP_NAME:${{ env.uat_env }}-${{ github.sha }}
 
   ApprovalforUAT:
     runs-on: ubuntu-latest
