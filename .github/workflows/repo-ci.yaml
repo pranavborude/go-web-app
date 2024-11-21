@@ -169,16 +169,22 @@ jobs:
           "$ARGOCD_URL/api/v1/applications/$APP_NAME" \
           -o api_response.json
 
-          # Extract the .status.health.status value using jq
-          # HEALTH_STATUS=$(echo "$JSON_OUTPUT" | jq -r '.status.health.status')
-
+          # Install jq if not available
+          sudo apt-get update && sudo apt-get install -y jq
+                    
+          # Extract .status.health.status
+          HEALTH_STATUS=$(jq -r '.status.health.status' api_response.json)
+          
           # Export the value as an output variable
-          if [[ "$HEALTH_STATUS" == "healthy" ]]; then
+          echo "Health Status: $HEALTH_STATUS"
+
+          # Check health status
+          if [[ "$HEALTH_STATUS" == "Healthy" ]]; then
               echo "Application is healthy."
           else
               echo "Application health check failed!"
               exit 1
-          fi          
+          fi    
 
   ApprovalforUAT:
     runs-on: ubuntu-latest
