@@ -165,9 +165,12 @@ jobs:
 
           # Fetch application details using the ArgoCD token
           curl -s -L -k -X GET \
-          -H "Authorization: Bearer ${{ secrets.ARGOCD_AUTH_TOKEN }}" \
+          -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
+          -H "Content-Type: application/json" \
+          -H "Accept: application/json" \
           "$ARGOCD_URL/api/v1/applications/$APP_NAME" \
           -o api_response.json
+
                     
           cat api_response.json
 
