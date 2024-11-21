@@ -6,7 +6,8 @@ on:
 
 env:
   SKIP_SONAR: false
-  ENVIRONMENT: dev
+  dev_env: dev
+  uat_env: uat
   
   # Replace with your ArgoCD URL and application name
   ARGOCD_URL: "http://aadf0d623dab14626b531a6c682f4fea-237815234.ap-south-1.elb.amazonaws.com"
@@ -119,7 +120,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/go-web-app:${{ env.ENVIRONMENT }}-${{ github.sha }} # github.run_id -> github.sha (for tagging image using COMMIT_ID)
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/go-web-app:${{ env.dev_env }}-${{ github.sha }} # github.run_id -> github.sha (for tagging image using COMMIT_ID)
 
       # - name: Integration Testing
       #   run: echo "Running integration tests..." 
@@ -146,7 +147,7 @@ jobs:
           cd go-web-app-gitops/go-web-app-chart/
           git config --global user.email "pranavborude2000@gmail.com"
           git config --global user.name "Pranav Borude"
-          sed -i.bak "s/tag: .*/tag: \"${{ env.ENVIRONMENT }}-${{ github.sha }}\"/" ./values.yaml
+          sed -i.bak "s/tag: .*/tag: \"${{ env.dev_env }}-${{ github.sha }}\"/" ./values-dev.yaml
           git commit -am "Update image tag"
           git push https://x-access-token:${{ secrets.TOKEN }}@github.com/pranavborude/go-web-app-gitops.git master
           
@@ -197,9 +198,31 @@ jobs:
               exit 1
           fi    
 
-  ApprovalforUAT:
+
+  TagImageforUAT:
     runs-on: ubuntu-latest
     needs: CheckAppStatus
+
+    steps:
+      - name: Tag existing image with uat tag
+        run: |
+          docker pull pranav1562/$APP_NAME:${{ env.dev_env }}
+          
+          docker tag pranav1562/$APP_NAME:${{ env.uat_env }}
+          
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Push to Repository
+        run: |
+          docker push pranav1562/$APP_NAME:${{ env.uat_env }}
+
+  ApprovalforUAT:
+    runs-on: ubuntu-latest
+    needs: TagImageforUAT
 
     steps:
 
@@ -214,7 +237,80 @@ jobs:
           exclude-workflow-initiator-as-approver: false
           # additional-approved-words: ''
           # additional-denied-words: ''
-              
+
+  ChangetagforgitopsUAT:
+    runs-on: ubuntu-latest
+    needs: ApprovalforUAT
+
+    steps:
+
+      - name: Configure Git user
+        run: |
+          git config --global user.email "pranavborude2000@gmail.com"
+          git config --global user.name "Pranav Borude"
+      
+      # - name: Checkout repository
+      #   uses: actions/checkout@v3
+      #   with:
+      #     token: {{ secrets.TOKEN }}  # Use the secret token to authenticate
+      
+      - name: Update Tag in GitOps for uat
+        run: |
+          git clone https://github.com/pranavborude/go-web-app-gitops.git
+          cd go-web-app-gitops/go-web-app-chart/
+          git config --global user.email "pranavborude2000@gmail.com"
+          git config --global user.name "Pranav Borude"
+          sed -i.bak "s/tag: .*/tag: \"${{ env.uat_env }}-${{ github.sha }}\"/" ./values-uat.yaml
+          git commit -am "Update image tag"
+          git push https://x-access-token:${{ secrets.TOKEN }}@github.com/pranavborude/go-web-app-gitops.git master
+          
+  CheckAppStatusforUAT:
+    runs-on: ubuntu-latest
+    needs: ChangetagforgitopsUAT
+
+    steps:
+
+      - name: Fetch Application JSON
+        env:  
+          ARGOCD_URL: "http://aadf0d623dab14626b531a6c682f4fea-237815234.ap-south-1.elb.amazonaws.com"
+          APP_NAME_UAT: "go-web-app-uat"
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+
+      - name: Login to obtain session
+        run: |
+          curl -s -L -k -X POST \
+          -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{
+                "username": "admin",
+                "password": "Pranav@123"
+              }' \
+          "$ARGOCD_URL/api/v1/session" \
+          -c cookies.txt
+
+      - name: Fetch application details
+        run: |
+          curl -s -L -k -X GET \
+          -b cookies.txt \
+          -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
+          "$ARGOCD_URL/api/v1/applications/$APP_NAME_UAT" \
+          -o api_response.json
+
+          # Extract .status.health.status
+          HEALTH_STATUS=$(jq -r '.status.health.status' api_response.json)
+          
+          # Export the value as an output variable
+          echo "Health Status: $HEALTH_STATUS"
+
+          # Check health status
+          if [[ "$HEALTH_STATUS" == "Healthy" ]]; then
+              echo "Application is healthy."
+          else
+              echo "Application health check failed!"
+              exit 1
+          fi    
+
       - name: Post Deployment Tests
         run: echo "Running post-deployment tests..."
 
