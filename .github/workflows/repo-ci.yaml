@@ -166,8 +166,12 @@ jobs:
       - name: Login to obtain session
         run: |
           curl -s -L -k -X POST \
-          -H "Content-Type: application/json" \
           -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d '{
+                "username": "admin",
+                "password": "Pranav@123"
+              }' \
           "$ARGOCD_URL/api/v1/session" \
           -c cookies.txt
 
