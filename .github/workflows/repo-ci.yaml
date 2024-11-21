@@ -257,7 +257,7 @@ jobs:
       - name: Update Tag in GitOps for uat
         run: |
           git clone https://github.com/pranavborude/go-web-app-gitops.git
-          cd go-web-app-gitops/go-web-app-chart/
+          cd go-web-app-gitops/go-web-app-chart-uat/
           git config --global user.email "pranavborude2000@gmail.com"
           git config --global user.name "Pranav Borude"
           sed -i.bak "s/tag: .*/tag: \"${{ env.uat_env }}-${{ github.sha }}\"/" ./values-uat.yaml
