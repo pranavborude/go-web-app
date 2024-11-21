@@ -273,7 +273,7 @@ jobs:
       - name: Fetch Application JSON
         env:  
           ARGOCD_URL: "http://aadf0d623dab14626b531a6c682f4fea-237815234.ap-south-1.elb.amazonaws.com"
-          APP_NAME_UAT: "go-web-app-uat"
+          # APP_NAME_UAT: "go-web-app-uat"
           ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
         run: |
 
@@ -294,7 +294,7 @@ jobs:
           curl -s -L -k -X GET \
           -b cookies.txt \
           -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
-          "$ARGOCD_URL/api/v1/applications/$APP_NAME_UAT" \
+          "$ARGOCD_URL/api/v1/applications/go-web-app-uat" \
           -o api_response.json
 
           # Extract .status.health.status
