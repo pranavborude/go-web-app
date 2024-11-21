@@ -168,12 +168,11 @@ jobs:
           -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
           "$ARGOCD_URL/api/v1/applications/$APP_NAME" \
           -o api_response.json
-
-          # Install jq if not available
-          sudo apt-get update && sudo apt-get install -y jq
                     
+          cat api_response.json
+
           # Extract .status.health.status
-          HEALTH_STATUS=$(jq -r '.status.health.status' api_response.json)
+          HEALTH_STATUS=$(grep -oP '"health"\s*:\s*{\s*"status"\s*:\s*"\K[^"]+' api_response.json)
           
           # Export the value as an output variable
           echo "Health Status: $HEALTH_STATUS"
