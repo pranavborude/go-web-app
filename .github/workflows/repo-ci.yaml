@@ -163,15 +163,30 @@ jobs:
           ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
         run: |
 
-          # Fetch application details using the ArgoCD token
-          curl -s -L -k -X GET \
-          -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
+      - name: Login to obtain session
+        run: |
+          curl -s -L -k -X POST \
           -H "Content-Type: application/json" \
-          -H "Accept: application/json" \
+          -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
+          "$ARGOCD_URL/api/v1/session" \
+          -c cookies.txt
+
+      - name: Fetch application details
+        run: |
+          curl -s -L -k -X GET \
+          -b cookies.txt \
+          -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
           "$ARGOCD_URL/api/v1/applications/$APP_NAME" \
           -o api_response.json
 
-                    
+          # # Fetch application details using the ArgoCD token
+          # curl -s -L -k -X GET \
+          # -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
+          # -H "Content-Type: application/json" \
+          # -H "Accept: application/json" \
+          # "$ARGOCD_URL/api/v1/applications/$APP_NAME" \
+          # -o api_response.json
+
           cat api_response.json
 
           # Extract .status.health.status
