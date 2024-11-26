@@ -145,7 +145,8 @@ jobs:
         run: |
           git clone https://github.com/pranavborude/${{env.GITOPS_REPO}}.git
           cd ${{env.GITOPS_REPO}}/go-web-app-chart/
-
+          git config --global user.email "pranavborude2000@gmail.com"
+          git config --global user.name "Pranav Borude"
           sed -i.bak "s/tag: .*/tag: \"${{ env.DEV_ENV }}-${{ github.sha }}\"/" ./values-dev.yaml
           git commit -am "Update image tag for ${{env.DEV_ENV}}"
           git push https://x-access-token:${{ secrets.PAT_GITHUB_TOKEN }}@github.com/pranavborude/${{env.GITOPS_REPO}}.git
@@ -251,7 +252,8 @@ jobs:
         run: |
           git clone https://github.com/pranavborude/${{env.GITOPS_REPO}}.git
           cd ${{env.GITOPS_REPO}}/go-web-app-chart-uat/
-
+          git config --global user.email "pranavborude2000@gmail.com"
+          git config --global user.name "Pranav Borude"
           sed -i.bak "s/tag: .*/tag: \"${{ env.UAT_ENV }}-${{ github.sha }}\"/" ./values-uat.yaml
           git commit -am "Update image tag"
           git push https://x-access-token:${{ secrets.PAT_GITHUB_TOKEN }}@github.com/pranavborude/${{env.GITOPS_REPO}}.git
