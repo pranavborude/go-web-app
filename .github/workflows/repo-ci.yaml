@@ -1,4 +1,4 @@
-name: Go application build pipeline - repo-ci
+name: Go Application CI/CD Pipeline
 on: 
   push:
     branches:
@@ -6,17 +6,19 @@ on:
 
 env:
   SKIP_SONAR: false
-  dev_env: dev
-  uat_env: uat
-  
+  DEV_ENV: dev
+  UAT_ENV: uat
   # Replace with your ArgoCD URL and application name
-  ARGOCD_URL: "http://aadf0d623dab14626b531a6c682f4fea-237815234.ap-south-1.elb.amazonaws.com"
+  ARGOCD_URL: ${{ secrets.ARGOCD_URL }}
+  IMAGE_REPO: "go-web-app"
   APP_NAME: "go-web-app"
+  APP_NAME_UAT: "go-web-app-uat"
+  GITOPS_REPO: "go-web-app-gitops"
 
 jobs:
-  Install:
+  setup-environment:
+    name: Setup Environment
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -28,9 +30,10 @@ jobs:
         with:
           go-version: 1.22
 
-  Code_Scanning:
+  static-code-analysis:
+    name: Static Code Analysis
     runs-on: ubuntu-latest
-    needs: Install
+    needs: setup-environment
 
     steps:
       - name: Checkout source code
@@ -41,7 +44,7 @@ jobs:
       - name: Check for GitLeaks
         uses: gitleaks/gitleaks-action@v2
         with:
-          TOKEN: ${{ secrets.TOKEN }}
+          TOKEN: ${{ secrets.PAT_GITHUB_TOKEN }}
           
       - name: SonarQube Scan
         if: ${{ env.SKIP_SONAR != 'true' }}
@@ -51,12 +54,10 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         continue-on-error: true
    
-      - name: SonarQube Quality Gate check
+      - name: SonarQube Quality Gate
         if: ${{ env.SKIP_SONAR != 'true' }}
         id: sonarqube-quality-gate-check
         uses: opsverseio/sonarqube-quality-gate-action@0.1.0
-        # Force to fail step after specific time.
-        timeout-minutes: 5
         env:
          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }} #OPTIONAL
@@ -64,42 +65,42 @@ jobs:
         continue-on-error: true
 
 
-  Code_Build:
+  build-and-test:
+    name: Build and Unit Test
     runs-on: ubuntu-latest
-    needs: Code_Scanning
-
+    needs: static-code-analysis
     steps:
-
       - name: Checkout source code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
     
-      - name: Build Code
+      - name: Build Application
         run: |
           echo "Building the Go application..."
           pwd
-          go build -o go-web-app
+          go build -o ${{ env.APP_NAME }}
 
-      - name: Run Tests
+      - name: Run Unit Tests
         run: |
-          echo "Testing..."
+          echo "Running Unit Tests..."
           go test ./...
 
-      - name: golangci-lint
+      - name: Run Linter - golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.60
 
-  PushImage2Dockerhub:
+  containerize-and-push:
+    name: Containerize and Push Image
     runs-on: ubuntu-latest
-    needs: Code_Build
+    needs: build-and-test
 
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Hadolint
+      - name: Run Hadolint
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: ./Dockerfile
@@ -114,27 +115,26 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and Push action
+      - name: Build and Push Docker Image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/go-web-app:${{ env.dev_env }}-${{ github.sha }} # github.run_id -> github.sha (for tagging image using COMMIT_ID)
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_REPO }}:${{ env.DEV_ENV }}-${{ github.sha }} # github.run_id -> github.sha (for tagging image using COMMIT_ID)
 
       # - name: Integration Testing
       #   run: echo "Running integration tests..." 
 
-  UpdateImageTag:
+  update-gitops-dev:
+    name: Update GitOps for Dev
     runs-on: ubuntu-latest
-    needs: PushImage2Dockerhub
-
+    needs: containerize-and-push
     steps:
-
-      - name: Configure Git user
-        run: |
-          git config --global user.email "pranavborude2000@gmail.com"
-          git config --global user.name "Pranav Borude"
+      # - name: Configure Git user
+      #   run: |
+      #     git config --global user.email "pranavborude2000@gmail.com"
+      #     git config --global user.name "Pranav Borude"
       
       # - name: Checkout repository
       #   uses: actions/checkout@v3
@@ -143,45 +143,38 @@ jobs:
       
       - name: Update Tag in GitOps
         run: |
-          git clone https://github.com/pranavborude/go-web-app-gitops.git
-          cd go-web-app-gitops/go-web-app-chart/
-          git config --global user.email "pranavborude2000@gmail.com"
-          git config --global user.name "Pranav Borude"
-          sed -i.bak "s/tag: .*/tag: \"${{ env.dev_env }}-${{ github.sha }}\"/" ./values-dev.yaml
-          git commit -am "Update image tag"
-          git push https://x-access-token:${{ secrets.TOKEN }}@github.com/pranavborude/go-web-app-gitops.git master
+          git clone https://github.com/pranavborude/${{env.GITOPS_REPO}}.git
+          cd ${{env.GITOPS_REPO}}/go-web-app-chart/
+
+          sed -i.bak "s/tag: .*/tag: \"${{ env.DEV_ENV }}-${{ github.sha }}\"/" ./values-dev.yaml
+          git commit -am "Update image tag for ${{env.DEV_ENV}}"
+          git push https://x-access-token:${{ secrets.PAT_GITHUB_TOKEN }}@github.com/pranavborude/${{env.GITOPS_REPO}}.git
           
-  CheckAppStatus:
+  health-check-dev:
+    name: Health Check - Dev
     runs-on: ubuntu-latest
-    needs: UpdateImageTag
+    needs: update-gitops-dev
 
     steps:
-
-      - name: Fetch Application JSON
-        env:  
-          ARGOCD_URL: "http://aadf0d623dab14626b531a6c682f4fea-237815234.ap-south-1.elb.amazonaws.com"
-          APP_NAME: "go-web-app"
-          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
-        run: |
 
       - name: Login to obtain session
         run: |
           curl -s -L -k -X POST \
-          -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
+          -H "Authorization: Bearer ${{ secrets.ARGOCD_AUTH_TOKEN }}" \
           -H "Content-Type: application/json" \
           -d '{
                 "username": "admin",
-                "password": "Pranav@123"
+                "password": "${{ secrets.ARGOCD_PASSWORD }}"
               }' \
-          "$ARGOCD_URL/api/v1/session" \
+          "${{ secrets.ARGOCD_URL }}/api/v1/session" \
           -c cookies.txt
 
-      - name: Fetch application details
+      - name: Fetch application details for dev env
         run: |
           curl -s -L -k -X GET \
           -b cookies.txt \
-          -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
-          "$ARGOCD_URL/api/v1/applications/$APP_NAME" \
+          -H "Authorization: Bearer ${{ secrets.ARGOCD_AUTH_TOKEN }}" \
+          "${{ secrets.ARGOCD_URL }}/api/v1/applications/$APP_NAME" \
           -o api_response.json
 
           # Extract .status.health.status
@@ -198,17 +191,15 @@ jobs:
               exit 1
           fi    
 
-
-  TagImageforUAT:
+  image-tag-uat:
+    name: Tag Image for UAT
     runs-on: ubuntu-latest
-    needs: CheckAppStatus
-
+    needs: health-check-dev
     steps:
-      - name: Tag existing image with uat tag
+      - name: Pull and Tag Docker Image
         run: |
-          docker pull pranav1562/$APP_NAME:${{ env.dev_env }}-${{ github.sha }}
-          
-          docker image tag pranav1562/$APP_NAME:${{ env.dev_env }}-${{ github.sha }} pranav1562/$APP_NAME:${{ env.uat_env }}-${{ github.sha }}
+          docker pull ${{secrets.DOCKERHUB_USERNAME}}/${{ env.IMAGE_REPO }}:${{ env.DEV_ENV }}-${{ github.sha }}
+          docker image tag ${{secrets.DOCKERHUB_USERNAME}}/${{ env.IMAGE_REPO }}:${{ env.DEV_ENV }}-${{ github.sha }} ${{secrets.DOCKERHUB_USERNAME}}/${{ env.IMAGE_REPO }}:${{ env.UAT_ENV }}-${{ github.sha }}
           
       - name: Login to DockerHub
         uses: docker/login-action@v3
@@ -216,38 +207,40 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       
-      - name: Push to Repository
+      - name: Push Tagged Image
         run: |
-          docker push pranav1562/$APP_NAME:${{ env.uat_env }}-${{ github.sha }}
+          docker push ${{secrets.DOCKERHUB_USERNAME}}/${{ env.IMAGE_REPO }}:${{ env.UAT_ENV }}-${{ github.sha }}
 
-  ApprovalforUAT:
+  deploy-approval-uat:
+    name: Approval for UAT Deployment
     runs-on: ubuntu-latest
-    needs: TagImageforUAT
+    needs: image-tag-uat
 
     steps:
 
       - name: Waiting for approval
         uses: trstringer/manual-approval@v1
         with:
-          secret: ${{ secrets.TOKEN }}
+          secret: ${{ secrets.PAT_GITHUB_TOKEN }}
           approvers: pranavborude
           minimum-approvals: 1
-          issue-title: "Asking approval for UAT"
+          issue-title: "Asking approval for deployment to UAT env"
           # issue-body: "Please approve or deny the deployment of version v1.3.5."
           exclude-workflow-initiator-as-approver: false
           # additional-approved-words: ''
           # additional-denied-words: ''
 
-  ChangetagforgitopsUAT:
+  update-gitops-uat:
+    name: Update GitOps Repository
     runs-on: ubuntu-latest
-    needs: ApprovalforUAT
+    needs: deploy-approval-uat
 
     steps:
 
-      - name: Configure Git user
-        run: |
-          git config --global user.email "pranavborude2000@gmail.com"
-          git config --global user.name "Pranav Borude"
+      # - name: Configure Git user
+      #   run: |
+      #     git config --global user.email "pranavborude2000@gmail.com"
+      #     git config --global user.name "Pranav Borude"
       
       # - name: Checkout repository
       #   uses: actions/checkout@v3
@@ -256,45 +249,37 @@ jobs:
       
       - name: Update Tag in GitOps for uat
         run: |
-          git clone https://github.com/pranavborude/go-web-app-gitops.git
-          cd go-web-app-gitops/go-web-app-chart-uat/
-          git config --global user.email "pranavborude2000@gmail.com"
-          git config --global user.name "Pranav Borude"
-          sed -i.bak "s/tag: .*/tag: \"${{ env.uat_env }}-${{ github.sha }}\"/" ./values-uat.yaml
+          git clone https://github.com/pranavborude/${{env.GITOPS_REPO}}.git
+          cd ${{env.GITOPS_REPO}}/go-web-app-chart-uat/
+
+          sed -i.bak "s/tag: .*/tag: \"${{ env.UAT_ENV }}-${{ github.sha }}\"/" ./values-uat.yaml
           git commit -am "Update image tag"
-          git push https://x-access-token:${{ secrets.TOKEN }}@github.com/pranavborude/go-web-app-gitops.git master
+          git push https://x-access-token:${{ secrets.PAT_GITHUB_TOKEN }}@github.com/pranavborude/${{env.GITOPS_REPO}}.git
           
-  CheckAppStatusforUAT:
+  health-check-uat:
     runs-on: ubuntu-latest
-    needs: ChangetagforgitopsUAT
+    needs: update-gitops-uat
 
     steps:
-
-      - name: Fetch Application JSON
-        env:  
-          ARGOCD_URL: "http://aadf0d623dab14626b531a6c682f4fea-237815234.ap-south-1.elb.amazonaws.com"
-          # APP_NAME_UAT: "go-web-app-uat"
-          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
-        run: |
 
       - name: Login to obtain session
         run: |
           curl -s -L -k -X POST \
-          -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
+          -H "Authorization: Bearer ${{ secrets.ARGOCD_AUTH_TOKEN }}" \
           -H "Content-Type: application/json" \
           -d '{
                 "username": "admin",
-                "password": "Pranav@123"
+                "password": "${{ secrets.ARGOCD_PASSWORD }}"
               }' \
-          "$ARGOCD_URL/api/v1/session" \
+          "${{ secrets.ARGOCD_URL }}/api/v1/session" \
           -c cookies.txt
 
       - name: Fetch application details
         run: |
           curl -s -L -k -X GET \
           -b cookies.txt \
-          -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
-          "$ARGOCD_URL/api/v1/applications/go-web-app-uat" \
+          -H "Authorization: Bearer ${{ secrets.ARGOCD_AUTH_TOKEN }}" \
+          "${{ secrets.ARGOCD_URL }}/api/v1/applications/$APP_NAME_UAT" \
           -o api_response.json
 
           # Extract .status.health.status
