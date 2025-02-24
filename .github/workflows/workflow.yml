@@ -1,0 +1,178 @@
+name: Go Web Application CI/CD Pipeline
+on: 
+  push:
+    branches:
+      - master
+
+env:
+  SKIP_SONAR: false
+  DEV_ENV: dev
+  # Replace with your ArgoCD URL and application name
+  ARGOCD_URL: ${{ secrets.ARGOCD_URL }}
+  IMAGE_REPO: "go-web-app"
+  APP_NAME: "go-web-app"
+  GITOPS_REPO: "go-web-app-gitops"
+
+jobs:
+  setup-environment:
+    name: Setup Environment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Go 1.22
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.22
+
+  static-code-analysis:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+    needs: setup-environment
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for GitLeaks
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          TOKEN: ${{ secrets.PAT_GITHUB_TOKEN }}
+          
+      - name: SonarQube Scan
+        if: ${{ env.SKIP_SONAR != 'true' }}
+        uses: sonarsource/sonarqube-scan-action@v2.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        continue-on-error: true
+   
+      - name: SonarQube Quality Gate
+        if: ${{ env.SKIP_SONAR != 'true' }}
+        id: sonarqube-quality-gate-check
+        uses: opsverseio/sonarqube-quality-gate-action@0.1.0
+        env:
+         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+         SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }} #OPTIONAL
+         SET_SONAR_PROJECT_STATUS: true
+        continue-on-error: true
+
+
+  build-and-test:
+    name: Build and Unit Test
+    runs-on: ubuntu-latest
+    needs: static-code-analysis
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+    
+      - name: Build Application
+        run: |
+          echo "Building the Go application..."
+          pwd
+          go build -o ${{ env.APP_NAME }}
+
+      - name: Run Unit Tests
+        run: |
+          echo "Running Unit Tests..."
+          go test ./...
+
+      - name: Run Linter - golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.60
+
+  containerize-and-push:
+    name: Containerize and Push Image
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Run Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ./Dockerfile
+        continue-on-error: true
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_REPO }}:${{ env.DEV_ENV }}-${{ github.sha }} # github.run_id -> github.sha (for tagging image using COMMIT_ID)
+
+  update-gitops-dev:
+    name: Update GitOps for Dev
+    runs-on: ubuntu-latest
+    needs: containerize-and-push
+    steps:
+      - name: Update Tag in GitOps
+        run: |
+          git clone https://github.com/pranavborude/${{env.GITOPS_REPO}}.git
+          cd ${{env.GITOPS_REPO}}/go-web-app-chart/
+          git config --global user.email "pranavborude2000@gmail.com"
+          git config --global user.name "Pranav Borude"
+          sed -i.bak "s/tag: .*/tag: \"${{ env.DEV_ENV }}-${{ github.sha }}\"/" ./values-dev.yaml
+          git commit -am "Update image tag for ${{env.DEV_ENV}}"
+          git push https://x-access-token:${{ secrets.PAT_GITHUB_TOKEN }}@github.com/pranavborude/${{env.GITOPS_REPO}}.git
+          
+  health-check-dev:
+    name: Health Check - Dev
+    runs-on: ubuntu-latest
+    needs: update-gitops-dev
+
+    steps:
+      - name: Login to obtain session
+        run: |
+          curl -s -L -k -X POST \
+          -H "Authorization: Bearer ${{ secrets.ARGOCD_AUTH_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d '{
+                "username": "admin",
+                "password": "${{ secrets.ARGOCD_PASSWORD }}"
+              }' \
+          "${{ secrets.ARGOCD_URL }}/api/v1/session" \
+          -c cookies.txt
+
+      - name: Fetch application details for dev env
+        run: |
+          curl -s -L -k -X GET \
+          -b cookies.txt \
+          -H "Authorization: Bearer ${{ secrets.ARGOCD_AUTH_TOKEN }}" \
+          "${{ secrets.ARGOCD_URL }}/api/v1/applications/$APP_NAME" \
+          -o api_response.json
+
+          # Extract .status.health.status
+          HEALTH_STATUS=$(jq -r '.status.health.status' api_response.json)
+          
+          # Export the value as an output variable
+          echo "Health Status: $HEALTH_STATUS"
+
+          # Check health status
+          if [[ "$HEALTH_STATUS" == "Healthy" ]]; then
+              echo "Application is healthy."
+          else
+              echo "Application health check failed!"
+              exit 1
+          fi    
+          
+      - name: Post Deployment Tests
+        run: echo "Running post-deployment tests..."
